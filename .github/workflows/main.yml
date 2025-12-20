@@ -31,6 +31,10 @@ jobs:
     name: Build Android APK & AAB
     runs-on: ubuntu-latest
     
+    # Set environment variable from secret to use in conditions
+    env:
+      HAS_KEYSTORE: ${{ secrets.KEYSTORE_BASE64 != '' }}
+    
     steps:
       # Checkout repository
       - name: Checkout repository
@@ -95,7 +99,6 @@ jobs:
       # Update config.xml for SDK 35
       - name: Update SDK version in config.xml
         run: |
-          # Check if preference already exists, update or add
           if grep -q "android-targetSdkVersion" config.xml; then
             sed -i 's/android-targetSdkVersion" value="[0-9]*"/android-targetSdkVersion" value="${{ env.ANDROID_TARGET_SDK }}"/g' config.xml
           else
@@ -111,13 +114,11 @@ jobs:
       # Update build.gradle for SDK 35
       - name: Update Gradle files for SDK 35
         run: |
-          # Update project level build.gradle if exists
           if [ -f "platforms/android/build.gradle" ]; then
             sed -i "s/compileSdkVersion [0-9]*/compileSdkVersion ${{ env.ANDROID_COMPILE_SDK }}/g" platforms/android/build.gradle
             sed -i "s/targetSdkVersion [0-9]*/targetSdkVersion ${{ env.ANDROID_TARGET_SDK }}/g" platforms/android/build.gradle
           fi
           
-          # Update app level build.gradle
           if [ -f "platforms/android/app/build.gradle" ]; then
             sed -i "s/compileSdkVersion [0-9]*/compileSdkVersion ${{ env.ANDROID_COMPILE_SDK }}/g" platforms/android/app/build.gradle
             sed -i "s/targetSdkVersion [0-9]*/targetSdkVersion ${{ env.ANDROID_TARGET_SDK }}/g" platforms/android/app/build.gradle
@@ -125,7 +126,6 @@ jobs:
             sed -i "s/targetSdk [0-9]*/targetSdk ${{ env.ANDROID_TARGET_SDK }}/g" platforms/android/app/build.gradle
           fi
           
-          # Update cdvBuildTools version
           if [ -f "platforms/android/cdvBuildTools/build.gradle" ]; then
             sed -i "s/compileSdkVersion [0-9]*/compileSdkVersion ${{ env.ANDROID_COMPILE_SDK }}/g" platforms/android/cdvBuildTools/build.gradle
           fi
@@ -135,24 +135,31 @@ jobs:
         run: |
           GRADLE_PROPS="platforms/android/gradle.properties"
           if [ -f "$GRADLE_PROPS" ]; then
-            # Add or update properties for SDK 35
             echo "" >> $GRADLE_PROPS
             echo "# SDK 35 compatibility" >> $GRADLE_PROPS
             echo "android.useAndroidX=true" >> $GRADLE_PROPS
             echo "android.enableJetifier=true" >> $GRADLE_PROPS
           fi
 
+      # Check if keystore secret exists
+      - name: Check for signing configuration
+        id: check_signing
+        run: |
+          if [ -n "${{ secrets.KEYSTORE_BASE64 }}" ]; then
+            echo "has_keystore=true" >> $GITHUB_OUTPUT
+          else
+            echo "has_keystore=false" >> $GITHUB_OUTPUT
+          fi
+
       # Decode Keystore (for signed release builds)
       - name: Decode Keystore
-        if: ${{ secrets.KEYSTORE_BASE64 != '' }}
-        env:
-          KEYSTORE_BASE64: ${{ secrets.KEYSTORE_BASE64 }}
+        if: steps.check_signing.outputs.has_keystore == 'true'
         run: |
-          echo "$KEYSTORE_BASE64" | base64 -d > android.keystore
+          echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > android.keystore
 
       # Build Release APK (Unsigned)
       - name: Build Unsigned Release APK
-        if: ${{ secrets.KEYSTORE_BASE64 == '' }}
+        if: steps.check_signing.outputs.has_keystore == 'false'
         env:
           GRADLE_OPTS: "-Xmx4096m -Dorg.gradle.daemon=false"
         run: |
@@ -162,25 +169,22 @@ jobs:
 
       # Build Release APK (Signed)
       - name: Build Signed Release APK
-        if: ${{ secrets.KEYSTORE_BASE64 != '' }}
+        if: steps.check_signing.outputs.has_keystore == 'true'
         env:
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
           GRADLE_OPTS: "-Xmx4096m -Dorg.gradle.daemon=false"
         run: |
           cordova build android --release -- \
             --keystore=android.keystore \
-            --storePassword="$KEYSTORE_PASSWORD" \
-            --alias="$KEY_ALIAS" \
-            --password="$KEY_PASSWORD" \
+            --storePassword="${{ secrets.KEYSTORE_PASSWORD }}" \
+            --alias="${{ secrets.KEY_ALIAS }}" \
+            --password="${{ secrets.KEY_PASSWORD }}" \
             --packageType=apk \
             --gradleArg=-PcdvCompileSdkVersion=${{ env.ANDROID_COMPILE_SDK }} \
             --gradleArg=-PcdvTargetSdkVersion=${{ env.ANDROID_TARGET_SDK }}
 
       # Build Release AAB (Unsigned)
       - name: Build Unsigned Release AAB
-        if: ${{ secrets.KEYSTORE_BASE64 == '' }}
+        if: steps.check_signing.outputs.has_keystore == 'false'
         env:
           GRADLE_OPTS: "-Xmx4096m -Dorg.gradle.daemon=false"
         run: |
@@ -191,18 +195,15 @@ jobs:
 
       # Build Release AAB (Signed)
       - name: Build Signed Release AAB
-        if: ${{ secrets.KEYSTORE_BASE64 != '' }}
+        if: steps.check_signing.outputs.has_keystore == 'true'
         env:
-          KEYSTORE_PASSWORD: ${{ secrets.KEYSTORE_PASSWORD }}
-          KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
-          KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
           GRADLE_OPTS: "-Xmx4096m -Dorg.gradle.daemon=false"
         run: |
           cordova build android --release -- \
             --keystore=android.keystore \
-            --storePassword="$KEYSTORE_PASSWORD" \
-            --alias="$KEY_ALIAS" \
-            --password="$KEY_PASSWORD" \
+            --storePassword="${{ secrets.KEYSTORE_PASSWORD }}" \
+            --alias="${{ secrets.KEY_ALIAS }}" \
+            --password="${{ secrets.KEY_PASSWORD }}" \
             --packageType=bundle \
             --gradleArg=-PcdvCompileSdkVersion=${{ env.ANDROID_COMPILE_SDK }} \
             --gradleArg=-PcdvTargetSdkVersion=${{ env.ANDROID_TARGET_SDK }}
@@ -220,14 +221,12 @@ jobs:
         run: |
           mkdir -p build-output
           
-          # Find APK
           APK_PATH=$(find platforms/android -name "*.apk" -type f | grep -E "(release|Release)" | head -1)
           if [ -n "$APK_PATH" ]; then
             cp "$APK_PATH" build-output/app-release-${{ steps.version.outputs.version }}.apk
             echo "APK copied: $APK_PATH"
           fi
           
-          # Find AAB
           AAB_PATH=$(find platforms/android -name "*.aab" -type f | grep -E "(release|Release)" | head -1)
           if [ -n "$AAB_PATH" ]; then
             cp "$AAB_PATH" build-output/app-release-${{ steps.version.outputs.version }}.aab
@@ -275,7 +274,6 @@ jobs:
         id: tag_version
         run: echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
 
-      # Download artifacts
       - name: Download APK artifact
         uses: actions/download-artifact@v4
         with:
@@ -293,7 +291,6 @@ jobs:
       - name: List release assets
         run: ls -la release-assets/
 
-      # Create GitHub Release
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
