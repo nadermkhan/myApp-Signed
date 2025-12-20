@@ -12,66 +12,47 @@ on:
       - main
       - master
   workflow_dispatch:
-    inputs:
-      release_name:
-        description: 'Release name (optional)'
-        required: false
-        default: ''
 
 env:
   JAVA_VERSION: '17'
   NODE_VERSION: '18'
   ANDROID_BUILD_TOOLS_VERSION: '35.0.0'
   ANDROID_PLATFORM_VERSION: '35'
-  ANDROID_COMPILE_SDK: '35'
-  ANDROID_TARGET_SDK: '35'
+  CORDOVA_ANDROID_VERSION: '13.0.0'
 
 jobs:
   build:
     name: Build Android APK & AAB
     runs-on: ubuntu-latest
     
-    # Set environment variable from secret to use in conditions
-    env:
-      HAS_KEYSTORE: ${{ secrets.KEYSTORE_BASE64 != '' }}
-    
     steps:
-      # Checkout repository
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # Setup Java JDK
       - name: Set up JDK ${{ env.JAVA_VERSION }}
         uses: actions/setup-java@v4
         with:
           java-version: ${{ env.JAVA_VERSION }}
           distribution: 'temurin'
 
-      # Setup Node.js
       - name: Setup Node.js ${{ env.NODE_VERSION }}
         uses: actions/setup-node@v4
         with:
           node-version: ${{ env.NODE_VERSION }}
           cache: 'npm'
 
-      # Setup Android SDK
       - name: Setup Android SDK
         uses: android-actions/setup-android@v3
 
-      # Accept Android licenses
       - name: Accept Android SDK licenses
         run: yes | sdkmanager --licenses || true
 
-      # Install Android SDK components for SDK 35
       - name: Install Android SDK components
         run: |
           sdkmanager "platform-tools"
           sdkmanager "platforms;android-${{ env.ANDROID_PLATFORM_VERSION }}"
           sdkmanager "build-tools;${{ env.ANDROID_BUILD_TOOLS_VERSION }}"
-          sdkmanager "extras;android;m2repository"
-          sdkmanager "extras;google;m2repository"
 
-      # Cache Gradle dependencies
       - name: Cache Gradle packages
         uses: actions/cache@v4
         with:
@@ -82,133 +63,179 @@ jobs:
           restore-keys: |
             ${{ runner.os }}-gradle-
 
-      # Install Cordova CLI
       - name: Install Cordova CLI
         run: npm install -g cordova
 
-      # Install project dependencies
       - name: Install npm dependencies
         run: npm ci || npm install
 
-      # Add Android platform
-      - name: Add Android platform
-        run: |
-          cordova platform remove android || true
-          cordova platform add android@latest
+      - name: Remove existing Android platform
+        run: cordova platform remove android || true
 
-      # Update config.xml for SDK 35
-      - name: Update SDK version in config.xml
+      - name: Add Android platform with specific version
+        run: cordova platform add android@${{ env.CORDOVA_ANDROID_VERSION }}
+
+      - name: Verify config.xml SDK settings
         run: |
-          if grep -q "android-targetSdkVersion" config.xml; then
-            sed -i 's/android-targetSdkVersion" value="[0-9]*"/android-targetSdkVersion" value="${{ env.ANDROID_TARGET_SDK }}"/g' config.xml
-          else
-            sed -i '/<platform name="android">/a\        <preference name="android-targetSdkVersion" value="${{ env.ANDROID_TARGET_SDK }}" />' config.xml
+          # Ensure SDK preferences exist in config.xml
+          if ! grep -q "android-targetSdkVersion" config.xml; then
+            echo "Adding android-targetSdkVersion to config.xml"
+            sed -i 's|<platform name="android">|<platform name="android">\n        <preference name="android-targetSdkVersion" value="35" />|' config.xml
           fi
           
-          if grep -q "android-compileSdkVersion" config.xml; then
-            sed -i 's/android-compileSdkVersion" value="[0-9]*"/android-compileSdkVersion" value="${{ env.ANDROID_COMPILE_SDK }}"/g' config.xml
-          else
-            sed -i '/<platform name="android">/a\        <preference name="android-compileSdkVersion" value="${{ env.ANDROID_COMPILE_SDK }}" />' config.xml
+          if ! grep -q "android-compileSdkVersion" config.xml; then
+            echo "Adding android-compileSdkVersion to config.xml"
+            sed -i 's|<platform name="android">|<platform name="android">\n        <preference name="android-compileSdkVersion" value="35" />|' config.xml
           fi
+          
+          if ! grep -q "android-minSdkVersion" config.xml; then
+            echo "Adding android-minSdkVersion to config.xml"
+            sed -i 's|<platform name="android">|<platform name="android">\n        <preference name="android-minSdkVersion" value="24" />|' config.xml
+          fi
+          
+          echo "=== Current config.xml Android platform section ==="
+          grep -A 20 '<platform name="android">' config.xml || true
 
-      # Update build.gradle for SDK 35
-      - name: Update Gradle files for SDK 35
+      - name: Fix Gradle wrapper version
         run: |
-          if [ -f "platforms/android/build.gradle" ]; then
-            sed -i "s/compileSdkVersion [0-9]*/compileSdkVersion ${{ env.ANDROID_COMPILE_SDK }}/g" platforms/android/build.gradle
-            sed -i "s/targetSdkVersion [0-9]*/targetSdkVersion ${{ env.ANDROID_TARGET_SDK }}/g" platforms/android/build.gradle
-          fi
-          
-          if [ -f "platforms/android/app/build.gradle" ]; then
-            sed -i "s/compileSdkVersion [0-9]*/compileSdkVersion ${{ env.ANDROID_COMPILE_SDK }}/g" platforms/android/app/build.gradle
-            sed -i "s/targetSdkVersion [0-9]*/targetSdkVersion ${{ env.ANDROID_TARGET_SDK }}/g" platforms/android/app/build.gradle
-            sed -i "s/compileSdk [0-9]*/compileSdk ${{ env.ANDROID_COMPILE_SDK }}/g" platforms/android/app/build.gradle
-            sed -i "s/targetSdk [0-9]*/targetSdk ${{ env.ANDROID_TARGET_SDK }}/g" platforms/android/app/build.gradle
-          fi
-          
-          if [ -f "platforms/android/cdvBuildTools/build.gradle" ]; then
-            sed -i "s/compileSdkVersion [0-9]*/compileSdkVersion ${{ env.ANDROID_COMPILE_SDK }}/g" platforms/android/cdvBuildTools/build.gradle
+          # Use compatible Gradle version
+          GRADLE_WRAPPER="platforms/android/gradle/wrapper/gradle-wrapper.properties"
+          if [ -f "$GRADLE_WRAPPER" ]; then
+            sed -i 's|gradle-.*-bin.zip|gradle-8.7-bin.zip|g' $GRADLE_WRAPPER
+            sed -i 's|gradle-.*-all.zip|gradle-8.7-all.zip|g' $GRADLE_WRAPPER
+            echo "Updated Gradle wrapper:"
+            cat $GRADLE_WRAPPER
           fi
 
-      # Update gradle.properties for SDK 35 compatibility
+      - name: Fix build.gradle files
+        run: |
+          # Fix app/build.gradle
+          APP_GRADLE="platforms/android/app/build.gradle"
+          if [ -f "$APP_GRADLE" ]; then
+            # Ensure android block has compileSdkVersion
+            if ! grep -q "compileSdkVersion" "$APP_GRADLE" && ! grep -q "compileSdk " "$APP_GRADLE"; then
+              sed -i '/android {/a\    compileSdkVersion 35' "$APP_GRADLE"
+            fi
+            
+            # Replace any existing SDK version
+            sed -i 's/compileSdkVersion [0-9]*/compileSdkVersion 35/g' "$APP_GRADLE"
+            sed -i 's/compileSdk [0-9]*/compileSdk 35/g' "$APP_GRADLE"
+            sed -i 's/targetSdkVersion [0-9]*/targetSdkVersion 35/g' "$APP_GRADLE"
+            sed -i 's/targetSdk [0-9]*/targetSdk 35/g' "$APP_GRADLE"
+          fi
+          
+          # Fix CordovaLib/build.gradle
+          LIB_GRADLE="platforms/android/CordovaLib/build.gradle"
+          if [ -f "$LIB_GRADLE" ]; then
+            sed -i 's/compileSdkVersion [0-9]*/compileSdkVersion 35/g' "$LIB_GRADLE"
+            sed -i 's/compileSdk [0-9]*/compileSdk 35/g' "$LIB_GRADLE"
+          fi
+
+      - name: Create build-extras.gradle
+        run: |
+          cat > platforms/android/app/build-extras.gradle << 'EOF'
+          android {
+              compileSdkVersion 35
+              
+              defaultConfig {
+                  minSdkVersion 24
+                  targetSdkVersion 35
+              }
+              
+              compileOptions {
+                  sourceCompatibility JavaVersion.VERSION_17
+                  targetCompatibility JavaVersion.VERSION_17
+              }
+          }
+          EOF
+          
+          echo "Created build-extras.gradle"
+
       - name: Update gradle.properties
         run: |
           GRADLE_PROPS="platforms/android/gradle.properties"
-          if [ -f "$GRADLE_PROPS" ]; then
-            echo "" >> $GRADLE_PROPS
-            echo "# SDK 35 compatibility" >> $GRADLE_PROPS
-            echo "android.useAndroidX=true" >> $GRADLE_PROPS
-            echo "android.enableJetifier=true" >> $GRADLE_PROPS
-          fi
+          cat >> "$GRADLE_PROPS" << 'EOF'
+          
+          # SDK 35 compatibility
+          android.useAndroidX=true
+          android.enableJetifier=true
+          org.gradle.jvmargs=-Xmx4096m
+          org.gradle.daemon=false
+          android.defaults.buildfeatures.buildconfig=true
+          android.nonTransitiveRClass=false
+          android.nonFinalResIds=false
+          EOF
+          
+          echo "Updated gradle.properties:"
+          cat "$GRADLE_PROPS"
 
-      # Check if keystore secret exists
       - name: Check for signing configuration
         id: check_signing
         run: |
           if [ -n "${{ secrets.KEYSTORE_BASE64 }}" ]; then
             echo "has_keystore=true" >> $GITHUB_OUTPUT
+            echo "Keystore found, will create signed builds"
           else
             echo "has_keystore=false" >> $GITHUB_OUTPUT
+            echo "No keystore found, will create unsigned builds"
           fi
 
-      # Decode Keystore (for signed release builds)
       - name: Decode Keystore
         if: steps.check_signing.outputs.has_keystore == 'true'
         run: |
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > android.keystore
+          echo "Keystore decoded successfully"
 
-      # Build Release APK (Unsigned)
-      - name: Build Unsigned Release APK
-        if: steps.check_signing.outputs.has_keystore == 'false'
-        env:
-          GRADLE_OPTS: "-Xmx4096m -Dorg.gradle.daemon=false"
+      - name: Create build.json for signing
+        if: steps.check_signing.outputs.has_keystore == 'true'
         run: |
-          cordova build android --release -- \
-            --gradleArg=-PcdvCompileSdkVersion=${{ env.ANDROID_COMPILE_SDK }} \
-            --gradleArg=-PcdvTargetSdkVersion=${{ env.ANDROID_TARGET_SDK }}
+          cat > build.json << EOF
+          {
+            "android": {
+              "release": {
+                "keystore": "android.keystore",
+                "storePassword": "${{ secrets.KEYSTORE_PASSWORD }}",
+                "alias": "${{ secrets.KEY_ALIAS }}",
+                "password": "${{ secrets.KEY_PASSWORD }}",
+                "keystoreType": "jks"
+              }
+            }
+          }
+          EOF
+          echo "Created build.json for signing"
 
-      # Build Release APK (Signed)
+      # Build Signed APK
       - name: Build Signed Release APK
         if: steps.check_signing.outputs.has_keystore == 'true'
         env:
           GRADLE_OPTS: "-Xmx4096m -Dorg.gradle.daemon=false"
         run: |
-          cordova build android --release -- \
-            --keystore=android.keystore \
-            --storePassword="${{ secrets.KEYSTORE_PASSWORD }}" \
-            --alias="${{ secrets.KEY_ALIAS }}" \
-            --password="${{ secrets.KEY_PASSWORD }}" \
-            --packageType=apk \
-            --gradleArg=-PcdvCompileSdkVersion=${{ env.ANDROID_COMPILE_SDK }} \
-            --gradleArg=-PcdvTargetSdkVersion=${{ env.ANDROID_TARGET_SDK }}
+          cordova build android --release --buildConfig=build.json
 
-      # Build Release AAB (Unsigned)
-      - name: Build Unsigned Release AAB
-        if: steps.check_signing.outputs.has_keystore == 'false'
-        env:
-          GRADLE_OPTS: "-Xmx4096m -Dorg.gradle.daemon=false"
-        run: |
-          cordova build android --release -- \
-            --packageType=bundle \
-            --gradleArg=-PcdvCompileSdkVersion=${{ env.ANDROID_COMPILE_SDK }} \
-            --gradleArg=-PcdvTargetSdkVersion=${{ env.ANDROID_TARGET_SDK }}
-
-      # Build Release AAB (Signed)
+      # Build Signed AAB
       - name: Build Signed Release AAB
         if: steps.check_signing.outputs.has_keystore == 'true'
         env:
           GRADLE_OPTS: "-Xmx4096m -Dorg.gradle.daemon=false"
         run: |
-          cordova build android --release -- \
-            --keystore=android.keystore \
-            --storePassword="${{ secrets.KEYSTORE_PASSWORD }}" \
-            --alias="${{ secrets.KEY_ALIAS }}" \
-            --password="${{ secrets.KEY_PASSWORD }}" \
-            --packageType=bundle \
-            --gradleArg=-PcdvCompileSdkVersion=${{ env.ANDROID_COMPILE_SDK }} \
-            --gradleArg=-PcdvTargetSdkVersion=${{ env.ANDROID_TARGET_SDK }}
+          cordova build android --release --buildConfig=build.json -- --packageType=bundle
 
-      # Get app version from config.xml
+      # Build Unsigned APK
+      - name: Build Unsigned Release APK
+        if: steps.check_signing.outputs.has_keystore == 'false'
+        env:
+          GRADLE_OPTS: "-Xmx4096m -Dorg.gradle.daemon=false"
+        run: |
+          cordova build android --release
+
+      # Build Unsigned AAB
+      - name: Build Unsigned Release AAB
+        if: steps.check_signing.outputs.has_keystore == 'false'
+        env:
+          GRADLE_OPTS: "-Xmx4096m -Dorg.gradle.daemon=false"
+        run: |
+          cordova build android --release -- --packageType=bundle
+
       - name: Get App Version
         id: version
         run: |
@@ -216,47 +243,67 @@ jobs:
           echo "version=$VERSION" >> $GITHUB_OUTPUT
           echo "App Version: $VERSION"
 
-      # Find and rename build outputs
-      - name: Prepare build artifacts
+      - name: Find and prepare build artifacts
         run: |
           mkdir -p build-output
           
-          APK_PATH=$(find platforms/android -name "*.apk" -type f | grep -E "(release|Release)" | head -1)
+          echo "=== Searching for APK files ==="
+          find platforms/android -name "*.apk" -type f 2>/dev/null || true
+          
+          echo "=== Searching for AAB files ==="
+          find platforms/android -name "*.aab" -type f 2>/dev/null || true
+          
+          # Copy APK
+          APK_PATH=$(find platforms/android -name "*.apk" -type f | grep -iE "release" | grep -v "unsigned" | head -1)
+          if [ -z "$APK_PATH" ]; then
+            APK_PATH=$(find platforms/android -name "*.apk" -type f | head -1)
+          fi
+          
           if [ -n "$APK_PATH" ]; then
-            cp "$APK_PATH" build-output/app-release-${{ steps.version.outputs.version }}.apk
-            echo "APK copied: $APK_PATH"
+            cp "$APK_PATH" "build-output/app-release-${{ steps.version.outputs.version }}.apk"
+            echo "APK copied from: $APK_PATH"
+          else
+            echo "Warning: No APK found"
           fi
           
-          AAB_PATH=$(find platforms/android -name "*.aab" -type f | grep -E "(release|Release)" | head -1)
+          # Copy AAB
+          AAB_PATH=$(find platforms/android -name "*.aab" -type f | grep -iE "release" | head -1)
+          if [ -z "$AAB_PATH" ]; then
+            AAB_PATH=$(find platforms/android -name "*.aab" -type f | head -1)
+          fi
+          
           if [ -n "$AAB_PATH" ]; then
-            cp "$AAB_PATH" build-output/app-release-${{ steps.version.outputs.version }}.aab
-            echo "AAB copied: $AAB_PATH"
+            cp "$AAB_PATH" "build-output/app-release-${{ steps.version.outputs.version }}.aab"
+            echo "AAB copied from: $AAB_PATH"
+          else
+            echo "Warning: No AAB found"
           fi
           
+          echo "=== Build output contents ==="
           ls -la build-output/
 
-      # Upload APK artifact
       - name: Upload APK Artifact
         uses: actions/upload-artifact@v4
         with:
           name: release-apk-${{ steps.version.outputs.version }}
           path: build-output/*.apk
           retention-days: 30
+          if-no-files-found: warn
 
-      # Upload AAB artifact
       - name: Upload AAB Artifact
         uses: actions/upload-artifact@v4
         with:
           name: release-aab-${{ steps.version.outputs.version }}
           path: build-output/*.aab
           retention-days: 30
+          if-no-files-found: warn
 
-      # Clean up keystore
-      - name: Clean up keystore
+      - name: Clean up sensitive files
         if: always()
-        run: rm -f android.keystore
+        run: |
+          rm -f android.keystore
+          rm -f build.json
 
-  # Create GitHub Release (only on tags)
   release:
     name: Create GitHub Release
     needs: build
@@ -274,22 +321,17 @@ jobs:
         id: tag_version
         run: echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
 
-      - name: Download APK artifact
+      - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
-          pattern: release-apk-*
-          path: release-assets
-          merge-multiple: true
-
-      - name: Download AAB artifact
-        uses: actions/download-artifact@v4
-        with:
-          pattern: release-aab-*
           path: release-assets
           merge-multiple: true
 
       - name: List release assets
-        run: ls -la release-assets/
+        run: |
+          echo "=== Release assets ==="
+          find release-assets -type f || true
+          ls -laR release-assets/ || true
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
@@ -300,7 +342,7 @@ jobs:
           prerelease: false
           generate_release_notes: true
           files: |
-            release-assets/*.apk
-            release-assets/*.aab
+            release-assets/**/*.apk
+            release-assets/**/*.aab
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
