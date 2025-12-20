@@ -25,6 +25,9 @@ jobs:
     name: Build Android APK & AAB
     runs-on: ubuntu-latest
     
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
@@ -88,7 +91,6 @@ jobs:
           }
           EOF
           echo "Created cdv-gradle-config.json"
-          cat platforms/android/cdv-gradle-config.json
 
       - name: Check for signing configuration
         id: check_signing
@@ -215,7 +217,8 @@ jobs:
     name: Create GitHub Release
     needs: build
     runs-on: ubuntu-latest
-    if: startsWith(github.ref, 'refs/tags/')
+    # Run on push to main/master OR on tags (not on pull requests)
+    if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     
     permissions:
       contents: write
@@ -224,29 +227,68 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Get version from tag
-        id: tag_version
-        run: echo "version=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+      - name: Get version
+        id: get_version
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/}"
+          else
+            VERSION="${{ needs.build.outputs.version }}"
+          fi
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "Release version: $VERSION"
 
-      - name: Download all artifacts
+      - name: Generate release tag
+        id: release_tag
+        run: |
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            TAG="${GITHUB_REF#refs/tags/}"
+          else
+            TAG="v${{ steps.get_version.outputs.version }}-build.${{ github.run_number }}"
+          fi
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "Release tag: $TAG"
+
+      - name: Download APK artifact
         uses: actions/download-artifact@v4
         with:
+          name: release-apk-${{ needs.build.outputs.version }}
           path: release-assets
-          merge-multiple: true
+
+      - name: Download AAB artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: release-aab-${{ needs.build.outputs.version }}
+          path: release-assets
 
       - name: List release assets
-        run: ls -laR release-assets/ 2>/dev/null || true
+        run: |
+          echo "=== Release assets ==="
+          ls -la release-assets/
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
         with:
-          name: Release ${{ steps.tag_version.outputs.version }}
-          tag_name: ${{ github.ref_name }}
+          name: Release ${{ steps.get_version.outputs.version }} (Build ${{ github.run_number }})
+          tag_name: ${{ steps.release_tag.outputs.tag }}
           draft: false
           prerelease: false
           generate_release_notes: true
+          body: |
+            ## 📱 Android Release Build
+            
+            **Version:** ${{ steps.get_version.outputs.version }}
+            **Build Number:** ${{ github.run_number }}
+            **Commit:** ${{ github.sha }}
+            
+            ### 📦 Downloads
+            - **APK** - Direct install on Android devices
+            - **AAB** - For Google Play Store upload
+            
+            ### 📝 Changes
+            See commit history for changes in this release.
           files: |
-            release-assets/**/*.apk
-            release-assets/**/*.aab
+            release-assets/*.apk
+            release-assets/*.aab
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
