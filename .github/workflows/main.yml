@@ -19,7 +19,6 @@ env:
   ANDROID_BUILD_TOOLS_VERSION: '35.0.0'
   ANDROID_PLATFORM_VERSION: '35'
   CORDOVA_ANDROID_VERSION: '13.0.0'
-  GRADLE_VERSION: '8.13'
 
 jobs:
   build:
@@ -76,130 +75,8 @@ jobs:
       - name: Add Android platform
         run: cordova platform add android@${{ env.CORDOVA_ANDROID_VERSION }}
 
-      - name: Update config.xml with SDK settings
-        run: |
-          # Check if platform android section exists
-          if grep -q '<platform name="android">' config.xml; then
-            # Update or add preferences
-            if ! grep -q "android-targetSdkVersion" config.xml; then
-              sed -i 's|<platform name="android">|<platform name="android">\n        <preference name="android-targetSdkVersion" value="35" />|' config.xml
-            else
-              sed -i 's/android-targetSdkVersion" value="[0-9]*"/android-targetSdkVersion" value="35"/g' config.xml
-            fi
-            
-            if ! grep -q "android-compileSdkVersion" config.xml; then
-              sed -i 's|<platform name="android">|<platform name="android">\n        <preference name="android-compileSdkVersion" value="35" />|' config.xml
-            else
-              sed -i 's/android-compileSdkVersion" value="[0-9]*"/android-compileSdkVersion" value="35"/g' config.xml
-            fi
-            
-            if ! grep -q "android-minSdkVersion" config.xml; then
-              sed -i 's|<platform name="android">|<platform name="android">\n        <preference name="android-minSdkVersion" value="24" />|' config.xml
-            fi
-          fi
-          
-          echo "=== config.xml Android section ==="
-          grep -A 10 '<platform name="android">' config.xml || cat config.xml
-
-      - name: Update Gradle wrapper to 8.13
-        run: |
-          cd platforms/android
-          
-          # Update gradle-wrapper.properties
-          cat > gradle/wrapper/gradle-wrapper.properties << 'EOF'
-          distributionBase=GRADLE_USER_HOME
-          distributionPath=wrapper/dists
-          distributionUrl=https\://services.gradle.org/distributions/gradle-8.13-bin.zip
-          networkTimeout=10000
-          validateDistributionUrl=true
-          zipStoreBase=GRADLE_USER_HOME
-          zipStorePath=wrapper/dists
-          EOF
-          
-          echo "Updated gradle-wrapper.properties:"
-          cat gradle/wrapper/gradle-wrapper.properties
-
-      - name: Update gradle.properties
-        run: |
-          cat > platforms/android/gradle.properties << 'EOF'
-          org.gradle.jvmargs=-Xmx4096m -XX:+HeapDumpOnOutOfMemoryError -Dfile.encoding=UTF-8
-          org.gradle.daemon=false
-          org.gradle.parallel=true
-          org.gradle.caching=true
-          android.useAndroidX=true
-          android.enableJetifier=true
-          android.nonTransitiveRClass=false
-          android.nonFinalResIds=false
-          EOF
-          
-          echo "Updated gradle.properties"
-
-      - name: Fix cdvBuildTools build.gradle
-        run: |
-          # Fix the cdvBuildTools build.gradle to prevent null cordovaConfig
-          CDV_BUILD_TOOLS="platforms/android/cdvBuildTools/build.gradle"
-          if [ -f "$CDV_BUILD_TOOLS" ]; then
-            cat > "$CDV_BUILD_TOOLS" << 'EOF'
-          apply plugin: 'groovy'
-
-          repositories {
-              google()
-              mavenCentral()
-          }
-
-          dependencies {
-              implementation gradleApi()
-              implementation localGroovy()
-          }
-          EOF
-            echo "Fixed cdvBuildTools/build.gradle"
-          fi
-
-      - name: Fix app build.gradle
-        run: |
-          APP_GRADLE="platforms/android/app/build.gradle"
-          
-          if [ -f "$APP_GRADLE" ]; then
-            # Create backup
-            cp "$APP_GRADLE" "${APP_GRADLE}.bak"
-            
-            # Check if cdvCompileSdkVersion is defined, if not add default values
-            # Add fallback values for cordova properties at the top of the file
-            cat > /tmp/gradle_header.txt << 'EOF'
-          // Fallback values if cordovaConfig is not available
-          if (!project.hasProperty('cdvCompileSdkVersion')) {
-              ext.cdvCompileSdkVersion = 35
-          }
-          if (!project.hasProperty('cdvMinSdkVersion')) {
-              ext.cdvMinSdkVersion = 24
-          }
-          if (!project.hasProperty('cdvTargetSdkVersion')) {
-              ext.cdvTargetSdkVersion = 35
-          }
-          if (!project.hasProperty('cdvBuildToolsVersion')) {
-              ext.cdvBuildToolsVersion = "35.0.0"
-          }
-
-          EOF
-            
-            # Prepend to build.gradle
-            cat /tmp/gradle_header.txt "$APP_GRADLE" > /tmp/build.gradle.new
-            mv /tmp/build.gradle.new "$APP_GRADLE"
-            
-            # Fix cordovaConfig null reference - wrap in null check
-            sed -i 's/cordovaConfig\./project.hasProperty("cordovaConfig") \&\& cordovaConfig != null ? cordovaConfig./g' "$APP_GRADLE" || true
-            
-            # Replace direct compileSdkVersion references with fallback
-            sed -i 's/compileSdkVersion cordovaConfig.COMPILE_SDK_VERSION/compileSdkVersion project.hasProperty("cdvCompileSdkVersion") ? cdvCompileSdkVersion : 35/g' "$APP_GRADLE" || true
-            sed -i 's/targetSdkVersion cordovaConfig.TARGET_SDK_VERSION/targetSdkVersion project.hasProperty("cdvTargetSdkVersion") ? cdvTargetSdkVersion : 35/g' "$APP_GRADLE" || true
-            sed -i 's/minSdkVersion cordovaConfig.MIN_SDK_VERSION/minSdkVersion project.hasProperty("cdvMinSdkVersion") ? cdvMinSdkVersion : 24/g' "$APP_GRADLE" || true
-            
-            echo "Fixed app/build.gradle"
-          fi
-
       - name: Create cdv-gradle-config.json
         run: |
-          # Create the cordova gradle config file that the build.gradle expects
           cat > platforms/android/cdv-gradle-config.json << 'EOF'
           {
             "MIN_SDK_VERSION": 24,
@@ -207,17 +84,11 @@ jobs:
             "TARGET_SDK_VERSION": 35,
             "BUILD_TOOLS_VERSION": "35.0.0",
             "AGP_VERSION": "8.3.0",
-            "KOTLIN_VERSION": "1.9.22",
-            "GRADLE_VERSION": "8.13"
+            "KOTLIN_VERSION": "1.9.22"
           }
           EOF
-          
           echo "Created cdv-gradle-config.json"
-
-      - name: Prepare Cordova build
-        run: |
-          cd platforms/android
-          cordova prepare android || true
+          cat platforms/android/cdv-gradle-config.json
 
       - name: Check for signing configuration
         id: check_signing
@@ -234,7 +105,7 @@ jobs:
         if: steps.check_signing.outputs.has_keystore == 'true'
         run: |
           echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > ${{ github.workspace }}/android.keystore
-          echo "Keystore decoded to ${{ github.workspace }}/android.keystore"
+          echo "Keystore decoded successfully"
 
       - name: Create build.json for signing
         if: steps.check_signing.outputs.has_keystore == 'true'
@@ -258,43 +129,25 @@ jobs:
         if: steps.check_signing.outputs.has_keystore == 'true'
         env:
           GRADLE_OPTS: "-Xmx4096m -Dorg.gradle.daemon=false"
-        run: |
-          cordova build android --release --buildConfig=build.json -- \
-            -PcdvCompileSdkVersion=35 \
-            -PcdvTargetSdkVersion=35 \
-            -PcdvMinSdkVersion=24
+        run: cordova build android --release --buildConfig=build.json
 
       - name: Build Release AAB (Signed)
         if: steps.check_signing.outputs.has_keystore == 'true'
         env:
           GRADLE_OPTS: "-Xmx4096m -Dorg.gradle.daemon=false"
-        run: |
-          cordova build android --release --buildConfig=build.json -- \
-            --packageType=bundle \
-            -PcdvCompileSdkVersion=35 \
-            -PcdvTargetSdkVersion=35 \
-            -PcdvMinSdkVersion=24
+        run: cordova build android --release --buildConfig=build.json -- --packageType=bundle
 
       - name: Build Release APK (Unsigned)
         if: steps.check_signing.outputs.has_keystore == 'false'
         env:
           GRADLE_OPTS: "-Xmx4096m -Dorg.gradle.daemon=false"
-        run: |
-          cordova build android --release -- \
-            -PcdvCompileSdkVersion=35 \
-            -PcdvTargetSdkVersion=35 \
-            -PcdvMinSdkVersion=24
+        run: cordova build android --release
 
       - name: Build Release AAB (Unsigned)
         if: steps.check_signing.outputs.has_keystore == 'false'
         env:
           GRADLE_OPTS: "-Xmx4096m -Dorg.gradle.daemon=false"
-        run: |
-          cordova build android --release -- \
-            --packageType=bundle \
-            -PcdvCompileSdkVersion=35 \
-            -PcdvTargetSdkVersion=35 \
-            -PcdvMinSdkVersion=24
+        run: cordova build android --release -- --packageType=bundle
 
       - name: Get App Version
         id: version
@@ -316,30 +169,20 @@ jobs:
           # Copy APK
           APK_PATH=$(find platforms/android -name "*.apk" -type f | grep -iE "release" | grep -v "unsigned" | head -1)
           if [ -z "$APK_PATH" ]; then
-            APK_PATH=$(find platforms/android -name "*release*.apk" -type f | head -1)
-          fi
-          if [ -z "$APK_PATH" ]; then
             APK_PATH=$(find platforms/android -name "*.apk" -type f | head -1)
           fi
           
           if [ -n "$APK_PATH" ] && [ -f "$APK_PATH" ]; then
             cp "$APK_PATH" "build-output/app-release-${{ steps.version.outputs.version }}.apk"
             echo "✓ APK copied from: $APK_PATH"
-          else
-            echo "✗ No APK found"
           fi
           
           # Copy AAB
-          AAB_PATH=$(find platforms/android -name "*.aab" -type f | grep -iE "release" | head -1)
-          if [ -z "$AAB_PATH" ]; then
-            AAB_PATH=$(find platforms/android -name "*.aab" -type f | head -1)
-          fi
+          AAB_PATH=$(find platforms/android -name "*.aab" -type f | head -1)
           
           if [ -n "$AAB_PATH" ] && [ -f "$AAB_PATH" ]; then
             cp "$AAB_PATH" "build-output/app-release-${{ steps.version.outputs.version }}.aab"
             echo "✓ AAB copied from: $AAB_PATH"
-          else
-            echo "✗ No AAB found"
           fi
           
           echo "=== Build output ==="
@@ -392,10 +235,7 @@ jobs:
           merge-multiple: true
 
       - name: List release assets
-        run: |
-          echo "=== Release assets ==="
-          find release-assets -type f 2>/dev/null || true
-          ls -laR release-assets/ 2>/dev/null || true
+        run: ls -laR release-assets/ 2>/dev/null || true
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
