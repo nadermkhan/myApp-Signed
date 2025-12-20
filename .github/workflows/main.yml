@@ -159,52 +159,72 @@ jobs:
           echo "App Version: $VERSION"
 
       - name: Prepare build artifacts
+        id: prepare_artifacts
         run: |
           mkdir -p build-output
           
-          echo "=== All APK files ==="
-          find platforms/android -name "*.apk" -type f 2>/dev/null || echo "No APK found"
+          echo "=== Searching for build files ==="
           
-          echo "=== All AAB files ==="
-          find platforms/android -name "*.aab" -type f 2>/dev/null || echo "No AAB found"
+          # Find all APK files
+          echo "All APK files:"
+          find platforms/android -name "*.apk" -type f 2>/dev/null || echo "No APK files found"
           
-          # Copy APK
-          APK_PATH=$(find platforms/android -name "*.apk" -type f | grep -iE "release" | grep -v "unsigned" | head -1)
-          if [ -z "$APK_PATH" ]; then
-            APK_PATH=$(find platforms/android -name "*.apk" -type f | head -1)
+          # Find all AAB files
+          echo "All AAB files:"
+          find platforms/android -name "*.aab" -type f 2>/dev/null || echo "No AAB files found"
+          
+          # Copy APK - try multiple locations
+          APK_FOUND=false
+          for APK_PATH in \
+            "platforms/android/app/build/outputs/apk/release/app-release.apk" \
+            "platforms/android/app/build/outputs/apk/release/app-release-signed.apk" \
+            $(find platforms/android -name "*release*.apk" -type f 2>/dev/null) \
+            $(find platforms/android -name "*.apk" -type f 2>/dev/null); do
+            if [ -f "$APK_PATH" ]; then
+              cp "$APK_PATH" "build-output/app-release-${{ steps.version.outputs.version }}.apk"
+              echo "✓ APK copied from: $APK_PATH"
+              APK_FOUND=true
+              break
+            fi
+          done
+          
+          if [ "$APK_FOUND" = false ]; then
+            echo "⚠ No APK file found"
           fi
           
-          if [ -n "$APK_PATH" ] && [ -f "$APK_PATH" ]; then
-            cp "$APK_PATH" "build-output/app-release-${{ steps.version.outputs.version }}.apk"
-            echo "✓ APK copied from: $APK_PATH"
+          # Copy AAB - try multiple locations
+          AAB_FOUND=false
+          for AAB_PATH in \
+            "platforms/android/app/build/outputs/bundle/release/app-release.aab" \
+            $(find platforms/android -name "*release*.aab" -type f 2>/dev/null) \
+            $(find platforms/android -name "*.aab" -type f 2>/dev/null); do
+            if [ -f "$AAB_PATH" ]; then
+              cp "$AAB_PATH" "build-output/app-release-${{ steps.version.outputs.version }}.aab"
+              echo "✓ AAB copied from: $AAB_PATH"
+              AAB_FOUND=true
+              break
+            fi
+          done
+          
+          if [ "$AAB_FOUND" = false ]; then
+            echo "⚠ No AAB file found"
           fi
           
-          # Copy AAB
-          AAB_PATH=$(find platforms/android -name "*.aab" -type f | head -1)
-          
-          if [ -n "$AAB_PATH" ] && [ -f "$AAB_PATH" ]; then
-            cp "$AAB_PATH" "build-output/app-release-${{ steps.version.outputs.version }}.aab"
-            echo "✓ AAB copied from: $AAB_PATH"
-          fi
-          
-          echo "=== Build output ==="
+          echo "=== Build output contents ==="
           ls -la build-output/
+          
+          # Set outputs for artifact count
+          FILE_COUNT=$(ls -1 build-output/ 2>/dev/null | wc -l)
+          echo "file_count=$FILE_COUNT" >> $GITHUB_OUTPUT
 
-      - name: Upload APK Artifact
+      # Upload ALL artifacts in single upload
+      - name: Upload Build Artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: release-apk-${{ steps.version.outputs.version }}
-          path: build-output/*.apk
+          name: android-release-${{ steps.version.outputs.version }}
+          path: build-output/*
           retention-days: 30
-          if-no-files-found: warn
-
-      - name: Upload AAB Artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: release-aab-${{ steps.version.outputs.version }}
-          path: build-output/*.aab
-          retention-days: 30
-          if-no-files-found: warn
+          if-no-files-found: error
 
       - name: Clean up sensitive files
         if: always()
@@ -217,7 +237,6 @@ jobs:
     name: Create GitHub Release
     needs: build
     runs-on: ubuntu-latest
-    # Run on push to main/master OR on tags (not on pull requests)
     if: github.event_name == 'push' || github.event_name == 'workflow_dispatch'
     
     permissions:
@@ -249,22 +268,19 @@ jobs:
           echo "tag=$TAG" >> $GITHUB_OUTPUT
           echo "Release tag: $TAG"
 
-      - name: Download APK artifact
+      # Download ALL artifacts at once
+      - name: Download Build Artifacts
         uses: actions/download-artifact@v4
         with:
-          name: release-apk-${{ needs.build.outputs.version }}
-          path: release-assets
-
-      - name: Download AAB artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: release-aab-${{ needs.build.outputs.version }}
+          name: android-release-${{ needs.build.outputs.version }}
           path: release-assets
 
       - name: List release assets
         run: |
           echo "=== Release assets ==="
           ls -la release-assets/
+          echo "=== File details ==="
+          file release-assets/* || true
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v1
@@ -287,8 +303,6 @@ jobs:
             
             ### 📝 Changes
             See commit history for changes in this release.
-          files: |
-            release-assets/*.apk
-            release-assets/*.aab
+          files: release-assets/*
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
