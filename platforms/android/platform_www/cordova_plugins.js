@@ -18,8 +18,8 @@ cordova.define('cordova/plugin_list', function(require, exports, module) {
     }
   ];
   module.exports.metadata = {
-    "cordova-plugin-splashscreen": "6.0.1",
     "cordova-plugin-extension": "1.6.0",
+    "cordova-plugin-splashscreen": "6.0.1",
     "cordova-plugin-admob-plus": "1.3.2"
   };
 });

@@ -1,50 +1,967 @@
 <!DOCTYPE html>
-<!--
-    Licensed to the Apache Software Foundation (ASF) under one
-    or more contributor license agreements.  See the NOTICE file
-    distributed with this work for additional information
-    regarding copyright ownership.  The ASF licenses this file
-    to you under the Apache License, Version 2.0 (the
-    "License"); you may not use this file except in compliance
-    with the License.  You may obtain a copy of the License at
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <title>Cash Ledger</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no" />
+    <style>
+        :root {
+          --bg: #f3f4f6;
+          --header-bg: linear-gradient(135deg, #065f46, #022c22);
+          --top-band: #064e3b;
+          --surface: #ffffff;
+          --surface-soft: #f9fafb;
+          --primary: #16a34a;
+          --primary-soft: rgba(22, 163, 74, 0.15);
+          --border: #e5e7eb;
+          --text-main: #111827;
+          --text-muted: #6b7280;
+          --summary-bg: #ecfdf5;
+          --summary-border: #16a34a;
+        }
 
-    http://www.apache.org/licenses/LICENSE-2.0
+        * { box-sizing: border-box; }
 
-    Unless required by applicable law or agreed to in writing,
-    software distributed under the License is distributed on an
-    "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY
-     KIND, either express or implied.  See the License for the
-    specific language governing permissions and limitations
-    under the License.
--->
-<html>
-    <head>
-        <meta charset="utf-8">
-        <!--
-        Customize this policy to fit your own app's needs. For more guidance, please refer to the docs:
-            https://cordova.apache.org/docs/en/latest/
-        Some notes:
-            * https://ssl.gstatic.com is required only on Android and is needed for TalkBack to function properly
-            * Disables use of inline scripts in order to mitigate risk of XSS vulnerabilities. To change this:
-                * Enable inline JS: add 'unsafe-inline' to default-src
-        -->
-        <meta http-equiv="Content-Security-Policy" content="default-src 'self' data: https://ssl.gstatic.com 'unsafe-eval'; style-src 'self' 'unsafe-inline'; media-src *; img-src 'self' data: content:;">
-        <meta name="format-detection" content="telephone=no">
-        <meta name="msapplication-tap-highlight" content="no">
-        <meta name="viewport" content="initial-scale=1, width=device-width, viewport-fit=cover">
-        <meta name="color-scheme" content="light dark">
-        <link rel="stylesheet" href="css/index.css">
-        <title>Hello World</title>
-    </head>
-    <body>
-        <div class="app">
-            <h1>Apache Cordova</h1>
-            <div id="deviceready" class="blink">
-                <p class="event listening">Connecting to Device</p>
-                <p class="event received">Device is Ready</p>
+        body {
+          margin: 0;
+          padding: 0;
+          font-family: system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+          background: var(--bg);
+          color: var(--text-main);
+          transition: background 0.25s ease, color 0.25s ease;
+        }
+
+        .hidden { display: none; }
+
+        .container { max-width: 100%; margin: 0; padding: 0 4px 10px; }
+
+        .card {
+          background: var(--surface);
+          border-radius: 0;
+          padding: 0 4px 14px;
+          transition: background 0.25s ease;
+        }
+
+        /* HEADER */
+        header {
+          position: relative;
+          background: var(--header-bg);
+          padding: 10px 6px 12px;
+          margin: 0 -4px;
+          border-bottom: 1px solid #064e3b;
+          box-shadow: 0 4px 10px rgba(0,0,0,0.25);
+          color: #ecfdf5;
+        }
+        header h1 {
+          margin: 0 0 3px;
+          font-size: 20px;
+          font-weight: 800;
+          color: #ecfdf5;
+          display: flex;
+          align-items: center;
+          gap: 6px;
+        }
+        header h1 span.icon { font-size: 22px; }
+        header span.sub { font-size: 12px; color: #bbf7d0; }
+
+        .theme-toggle-btn {
+          position: absolute;
+          top: 8px;
+          right: 8px;
+          font-size: 11px;
+          padding: 4px 10px;
+          border-radius: 999px;
+          border: 1px solid #bbf7d0;
+          background: rgba(6,95,70,0.25);
+          color: #ecfdf5;
+          cursor: pointer;
+          backdrop-filter: blur(4px);
+        }
+
+        /* LIST VIEW */
+        .list-header {
+          margin-top: 12px;
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          gap: 8px;
+        }
+        .list-header h2 { margin: 0; font-size: 16px; color: var(--text-main); }
+        .btn-main-add {
+          border-radius: 999px;
+          border: 1px solid #16a34a;
+          background: #16a34a;
+          color: #ecfdf5;
+          font-size: 13px;
+          padding: 6px 14px;
+          cursor: pointer;
+          white-space: nowrap;
+          font-weight: 600;
+        }
+
+        .sheet-grid {
+          margin-top: 10px;
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+        }
+        .sheet-card {
+          flex: 0 0 100%;
+          max-width: 100%;
+          background: #ffffff;
+          border-radius: 12px;
+          border: 1px solid #e5e7eb;
+          padding: 10px 10px 8px;
+          cursor: pointer;
+          position: relative;
+          box-shadow: 0 6px 12px rgba(15,23,42,0.10);
+          transition: background 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+        }
+        .sheet-card-title {
+          font-size: 15px;
+          font-weight: 600;
+          margin: 0 0 3px;
+          color: var(--text-main);
+        }
+        .sheet-card-sub { font-size: 11px; color: var(--text-muted); }
+
+        /* DATE BAND */
+        .top-shell {
+          background: var(--top-band);
+          border-radius: 0 0 18px 18px;
+          margin: 0 -4px 8px;
+          padding: 8px 8px 10px;
+          box-shadow: 0 8px 18px rgba(15,23,42,0.25);
+          border-bottom: 1px solid #065f46;
+          color: #e5fdf4;
+        }
+        .top-row {
+          display: inline-flex;
+          align-items: center;
+          gap: 8px;
+          background: rgba(15,118,110,0.25);
+          padding: 3px 12px;
+          border-radius: 999px;
+          border: 1px solid #bbf7d0;
+        }
+        .back-btn {
+          border-radius: 999px;
+          border: 2px solid #bbf7d0;
+          background: #ecfdf5;
+          color: #065f46;
+          padding: 1px 18px;
+          font-size: 15px;
+          font-weight: 700;
+          cursor: pointer;
+        }
+        .sheet-title {
+          font-size: 17px;
+          font-weight: 700;
+          margin: 0;
+          color: #ecfdf5;
+        }
+
+        /* ZOOM WRAPPER */
+        .ledger-zoom-wrapper {
+          margin-top: 10px;
+          overflow: auto;
+        }
+        .ledger-zoom-inner {
+          transform-origin: top left;
+          transition: transform 0.05s linear;
+        }
+
+        /* LEDGER */
+        .ledger {
+          display: flex;
+          flex-wrap: nowrap;
+          gap: 8px;
+        }
+        .column {
+          flex: 0 0 82%;
+          max-width: 82%;
+          min-width: 82%;
+          background: #ffffff;
+          border-radius: 10px;
+          padding: 6px 6px 8px;
+          border: 1px solid var(--border);
+          box-shadow: 0 4px 10px rgba(148,163,184,0.3);
+          transition: background 0.25s ease, box-shadow 0.25s ease, border-color 0.25s ease;
+          position: relative;
+        }
+
+        .column-header h3 {
+          margin: 0;
+          font-size: 15px;
+          color: var(--text-main);
+        }
+
+        /* helper text + Add এক লাইনে */
+        .column-actions-row {
+          margin-top: 3px;
+          margin-right: 9px;
+          display: flex;
+          align-items: center;
+          gap: 6px;
+        }
+        .column-helper-text {
+          flex: 0 0 70%;
+          font-size: 11px;
+          color: var(--text-muted);
+        }
+        .column-add-btn {
+          flex: 0 0 30%;
+          border-radius: 999px;
+          border: 1px solid #16a34a;
+          background: #16a34a;
+          color: #ecfdf5;
+          height: 24px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 11px;
+          font-weight: 600;
+          padding: 0 10px;
+          cursor: pointer;
+          box-shadow: 0 2px 6px rgba(22,163,74,0.4);
+          white-space: nowrap;
+        }
+
+        .table-wrapper {
+          border-radius: 8px;
+          overflow: hidden;
+          border: 1px solid var(--border);
+          background: #ffffff;
+          transition: background 0.25s ease, border-color 0.25s ease;
+          margin-top: 6px;
+        }
+        table {
+          width: 100%;
+          border-collapse: collapse;
+          font-size: 13px;
+          table-layout: fixed;
+          color: var(--text-main);
+        }
+        thead { background: #f3f4f6; }
+        th, td {
+          padding: 1px 2px;
+          border-bottom: 1px solid #e5e7eb;
+        }
+        th:nth-child(1), td:nth-child(1) { width: auto; }
+        th.amount, td.amount { width: 80px; text-align: right; }
+        th:nth-child(3), td:nth-child(3) { width: 52px; text-align: center; }
+
+        tfoot td {
+          font-weight: 700;
+          background: #f9fafb;
+          padding: 4px 4px;
+          font-size: 14px;
+          border-top: 2px solid #e5e7eb;
+        }
+
+        input[type="text"],
+        input[type="number"] {
+          width: 100%;
+          border-radius: 0;
+          border: 1px solid #d1d5db;
+          font-size: 12px;
+          padding: 3px 3px;
+          background: #ffffff;
+          color: var(--text-main);
+          box-sizing: border-box;
+        }
+        input[type="number"] { text-align: right; }
+        input::placeholder { color: #9ca3af; }
+        input:focus {
+          outline: none;
+          border-color: var(--primary);
+          box-shadow: 0 0 0 1px var(--primary-soft);
+          background: #ffffff;
+        }
+
+        .action-btn {
+          display: inline-block;
+          width: 24px;
+          height: 27px;
+          line-height: 16px;
+          text-align: center;
+          font-size: 11px;
+          border-radius: 3px;
+          border: 1px solid #d1d5db;
+          background: #ffffff;
+          cursor: pointer;
+          padding: 0;
+          margin: 0;
+          color: var(--text-main);
+        }
+        .action-btn.delete { color: #b91c1c; font-weight: 600; }
+        .action-btn.clear { color: #1d4ed8; }
+
+        /* RESULT */
+        .summary-row {
+          margin-top: 10px;
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+        }
+        .summary-card {
+          flex: 1 1 100%;
+          border-radius: 16px;
+          padding: 8px 14px;
+          background: var(--summary-bg);
+          border: 1px solid var(--summary-border);
+          box-shadow: 0 4px 10px rgba(22,163,74,0.25);
+          transition: background 0.25s ease, border-color 0.25s ease;
+        }
+        .summary-line {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin: 2px 0;
+        }
+        .summary-line .label { font-size: 13px; color: var(--text-muted); }
+        .summary-line .value { font-size: 15px; font-weight: 700; color: #14532d; }
+
+        /* SHEET MENU */
+        .overlay {
+          position: fixed;
+          inset: 0;
+          background: rgba(15,23,42,.25);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          z-index: 999;
+        }
+        .overlay.hidden { display: none; }
+        .sheet-menu {
+          width: 320px;
+          max-width: 90%;
+          background: #ffffff;
+          border-radius: 14px;
+          padding: 16px 16px 12px;
+          box-shadow: 0 18px 40px rgba(15,23,42,.35);
+          border: 1px solid #e5e7eb;
+          color: var(--text-main);
+        }
+        .sheet-menu h3 {
+          margin: 0 0 6px;
+          font-size: 16px;
+          font-weight: 700;
+        }
+        .sheet-menu p {
+          margin: 0 0 12px;
+          font-size: 13px;
+          color: var(--text-muted);
+        }
+        .sheet-menu button {
+          width: 100%;
+          padding: 10px 10px;
+          margin-bottom: 8px;
+          border-radius: 10px;
+          border: 1px solid #d1d5db;
+          background: #ffffff;
+          font-size: 14px;
+          font-weight: 600;
+          cursor: pointer;
+          text-align: left;
+          color: var(--text-main);
+        }
+        .sheet-menu button:last-child { margin-bottom: 0; }
+        .sheet-menu button.danger {
+          background: #fee2e2;
+          border-color: #fecaca;
+          color: #b91c1c;
+        }
+        .sheet-menu button.cancel {
+          text-align: center;
+          background: #f3f4f6;
+        }
+
+        /* DARK MODE */
+        body.dark {
+          --bg: radial-gradient(circle at top, #0b1120 0, #020617 55%, #000 100%);
+          --surface: #020617;
+          --surface-soft: #020617;
+          --border: #1f2937;
+          --text-main: #e5e7eb;
+          --text-muted: #9ca3af;
+          --summary-bg: #020617;
+          --summary-border: #16a34a;
+        }
+        body.dark .card { background: #020617; }
+        body.dark .sheet-card {
+          background: #020617;
+          border-color: #1f2937;
+          box-shadow: 0 8px 24px rgba(0,0,0,0.75);
+        }
+        body.dark .sheet-card-sub { color: #9ca3af; }
+        body.dark .column {
+          background: #020617;
+          border-color: #1f2937;
+          box-shadow: 0 8px 24px rgba(0,0,0,0.75);
+        }
+        body.dark .table-wrapper {
+          background: #020617;
+          border-color: #1f2937;
+        }
+        body.dark thead { background: #020617; }
+        body.dark th, body.dark td { border-bottom-color: #111827; }
+        body.dark tfoot td {
+          background: #020617;
+          border-top-color: #1f2937;
+        }
+        body.dark input[type="text"],
+        body.dark input[type="number"] {
+          background: #020617;
+          border-color: #1f2937;
+          color: #e5e7eb;
+        }
+        body.dark input::placeholder { color: #6b7280; }
+        body.dark .action-btn {
+          background: #020617;
+          border-color: #4b5563;
+          color: #e5e7eb;
+        }
+        body.dark .action-btn.delete { color: #fca5a5; }
+        body.dark .action-btn.clear  { color: #93c5fd; }
+
+        body.dark .summary-card {
+          background: #020617;
+          border-color: #16a34a;
+          box-shadow: 0 8px 24px rgba(0,0,0,0.9);
+        }
+        body.dark .summary-line .value { color: #f9fafb; }
+        body.dark .summary-line .label { color: #bbf7d0; }
+
+        body.dark .sheet-menu {
+          background: #020617;
+          border-color: #1f2937;
+          color: #e5e7eb;
+        }
+        body.dark .sheet-menu button {
+          background: #020617;
+          border-color: #374151;
+          color: #e5e7eb;
+        }
+        body.dark .sheet-menu button.cancel { background: #020617; }
+        body.dark .sheet-menu button.danger {
+          background: #3f1215;
+          border-color: #9f1239;
+          color: #fecaca;
+        }
+        body.dark .back-btn{
+          background:#022c22;
+          color:#ecfdf5;
+          border-color:#bbf7d0;
+        }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="card">
+        <header>
+            <h1><span class="icon">💰</span>ক্যাশ মিলান</h1>
+            <span class="sub">দৈনিক ক্যাশ হ্যাভ ও ক্যাশ ডিউ এক জায়গায় রাখুন</span>
+            <button id="themeToggle" class="theme-toggle-btn">Switch to Dark</button>
+        </header>
+
+        <!-- LIST VIEW -->
+        <div id="sheetListView">
+            <div class="list-header">
+                <h2>All Sheets</h2>
+                <button class="btn-main-add" onclick="addSheetAndOpen()">+ Add Sheet</button>
+            </div>
+            <div class="sheet-grid" id="sheetGrid"></div>
+        </div>
+
+        <!-- DETAIL VIEW -->
+        <div id="sheetDetailView" class="hidden">
+            <div class="top-shell">
+                <div class="top-row">
+                    <button class="back-btn" onclick="backToList()">← Back</button>
+                    <h2 id="activeSheetName" class="sheet-title">Sheet</h2>
+                </div>
+            </div>
+
+            <div id="ledgerZoomWrapper" class="ledger-zoom-wrapper">
+                <div id="ledgerZoomInner" class="ledger-zoom-inner">
+                    <div class="ledger">
+                        <!-- Cash Have -->
+                        <div class="column">
+                            <div class="column-header">
+                                <h3>Cash Have / ক্যাশ আছে</h3>
+                                <div class="column-actions-row">
+                                    <div class="column-helper-text">ক্যাশ টাকা এখানে লিখুন।</div>
+                                    <button class="column-add-btn" onclick="addRow('cashIn')">+ Add</button>
+                                </div>
+                            </div>
+                            <div class="table-wrapper">
+                                <table>
+                                    <thead>
+                                    <tr>
+                                        <th>Description</th>
+                                        <th class="amount">Amount</th>
+                                        <th>Action</th>
+                                    </tr>
+                                    </thead>
+                                    <tbody id="cashInTableBody"></tbody>
+                                    <tfoot>
+                                    <tr>
+                                        <td>Total Have</td>
+                                        <td class="amount" id="cashInTotal">0.00</td>
+                                        <td></td>
+                                    </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+                        </div>
+
+                        <!-- Cash Due -->
+                        <div class="column">
+                            <div class="column-header">
+                                <h3>Cash Due / ক্যাশ পাবে</h3>
+                                <div class="column-actions-row">
+                                    <div class="column-helper-text">টাকা যারা পাবে এখানে লিখুন।</div>
+                                    <button class="column-add-btn" onclick="addRow('cashOut')">+ Add</button>
+                                </div>
+                            </div>
+                            <div class="table-wrapper">
+                                <table>
+                                    <thead>
+                                    <tr>
+                                        <th>Description</th>
+                                        <th class="amount">Amount</th>
+                                        <th>Action</th>
+                                    </tr>
+                                    </thead>
+                                    <tbody id="cashOutTableBody"></tbody>
+                                    <tfoot>
+                                    <tr>
+                                        <td>Total Due</td>
+                                        <td class="amount" id="cashOutTotal">0.00</td>
+                                        <td></td>
+                                    </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- RESULT এখন zoom inner-এর ভেতর -->
+                    <div class="summary-row">
+                        <div class="summary-card">
+                            <div class="summary-line">
+                                <span class="label">Total Cash</span>
+                                <span class="value" id="summaryIn">0.00</span>
+                            </div>
+                            <div class="summary-line">
+                                <span class="label">Total Due</span>
+                                <span class="value" id="summaryOut">0.00</span>
+                            </div>
+                            <div class="summary-line">
+                                <span class="label">Net (Have − Due)</span>
+                                <span class="value" id="summaryNet">0.00</span>
+                            </div>
+                        </div>
+                    </div>
+
+                </div>
             </div>
         </div>
-        <script src="cordova.js"></script>
-        <script src="js/index.js"></script>
-    </body>
+    </div>
+</div>
+
+<!-- SHEET MENU -->
+<div id="sheetMenuOverlay" class="overlay hidden">
+    <div class="sheet-menu">
+        <h3>Sheet options</h3>
+        <p id="sheetMenuTitle"></p>
+        <button onclick="sheetMenuAction('edit')">✏️  Edit Name</button>
+        <button onclick="sheetMenuAction('duplicate')">📄  Duplicate Sheet</button>
+        <button class="danger" onclick="sheetMenuAction('delete')">🗑️  Delete Sheet</button>
+        <button class="cancel" onclick="closeSheetMenu()">Close</button>
+    </div>
+</div>
+
+<script>
+    const STORAGE_KEY = "cashLedger_v15c";
+    let state = { sheets: [], activeSheetId: null };
+    let sheetMenuTargetId = null;
+    let viewMode = "list";
+
+    /* THEME FUNCTIONS */
+    function applySavedTheme() {
+      const saved = localStorage.getItem("cashLedger_theme");
+      if (saved === "dark") document.body.classList.add("dark");
+      updateThemeButtonText();
+    }
+    function updateThemeButtonText() {
+      const btn = document.getElementById("themeToggle");
+      if (!btn) return;
+      const isDark = document.body.classList.contains("dark");
+      btn.textContent = isDark ? "Switch to Light" : "Switch to Dark";
+    }
+    function initThemeToggle() {
+      const btn = document.getElementById("themeToggle");
+      if (!btn) return;
+      btn.addEventListener("click", () => {
+        document.body.classList.toggle("dark");
+        const isDark = document.body.classList.contains("dark");
+        localStorage.setItem("cashLedger_theme", isDark ? "dark" : "light");
+        updateThemeButtonText();
+      });
+    }
+
+    /* SHEET OBJECT */
+    function createSheet(name){
+      return {
+        id: Date.now().toString()+Math.random().toString(16).slice(2),
+        name,
+        cashIn: [],
+        cashOut: []
+      };
+    }
+
+    function getActiveSheet(){
+      return state.sheets.find(s=>s.id===state.activeSheetId);
+    }
+
+    function saveState(){
+      try{ localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
+      catch(e){ console.error(e); }
+    }
+
+    /* NO DEFAULT SHEET */
+    function loadState(){
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (raw) state = JSON.parse(raw);
+      } catch(e){ console.error(e); }
+
+      if (!state.sheets || !Array.isArray(state.sheets)) {
+        state.sheets = [];
+        state.activeSheetId = null;
+      }
+
+      if (state.sheets.length === 0) {
+        viewMode = "list";
+        state.activeSheetId = null;
+      }
+
+      if (state.sheets.length > 0 && !state.activeSheetId) {
+        state.activeSheetId = state.sheets[0].id;
+      }
+
+      updateViewMode();
+      renderAll();
+    }
+
+    function updateViewMode(){
+      const listView = document.getElementById("sheetListView");
+      const detailView = document.getElementById("sheetDetailView");
+      if(viewMode === "list"){
+        listView.classList.remove("hidden");
+        detailView.classList.add("hidden");
+      } else {
+        listView.classList.add("hidden");
+        detailView.classList.remove("hidden");
+      }
+    }
+
+    function backToList(){
+      viewMode = "list";
+      updateViewMode();
+      renderSheetList();
+    }
+
+    /* ADD NEW SHEET (২০টা লিমিট সহ) */
+    function addSheetAndOpen(){
+      // ২০টার বেশি Sheet হতে দেবে না
+      if (state.sheets && state.sheets.length >= 20) {
+        alert("দুঃখিত! আপনি ইতিমধ্যে ২০টি\nSheet অপেন করেছেন।\nচালিয়ে যেতে কিছু Sheet Delete অথবা Edit করুন।");
+        return;
+      }
+
+      const today = new Date();
+      const def = today.toLocaleDateString("en-GB").replace(/-/g,"/");
+      const name = prompt("New sheet name:", def) || def;
+      const sheet = createSheet(name.trim());
+      state.sheets.unshift(sheet);
+      state.activeSheetId = sheet.id;
+      saveState();
+      viewMode = "sheet";
+      updateViewMode();
+      renderAll();
+    }
+
+    function openSheet(id){
+      state.activeSheetId = id;
+      saveState();
+      viewMode = "sheet";
+      updateViewMode();
+      renderAll();
+    }
+
+    function renderAll(){
+      renderSheetList();
+      if(viewMode === "sheet") renderSheetContent();
+    }
+
+    /* SHEET LIST RENDER */
+    function renderSheetList(){
+      const grid = document.getElementById("sheetGrid");
+      grid.innerHTML = "";
+
+      if (!state.sheets || state.sheets.length === 0) return;
+
+      state.sheets.forEach((sheet)=>{
+        const card = document.createElement("div");
+        card.className = "sheet-card";
+
+        const title = document.createElement("div");
+        title.className = "sheet-card-title";
+        title.textContent = sheet.name;
+        card.appendChild(title);
+
+        const sub = document.createElement("div");
+        sub.className = "sheet-card-sub";
+        sub.textContent = "Tap to open • long press for options";
+        card.appendChild(sub);
+
+        let longPress = false;
+        let timer;
+
+        const startPress = () => {
+          longPress = false;
+          timer = setTimeout(()=>{
+            longPress = true;
+            openSheetMenu(sheet);
+          }, 550);
+        };
+        const endPress = () => { clearTimeout(timer); };
+
+        card.addEventListener("mousedown", startPress);
+        card.addEventListener("touchstart", startPress);
+        card.addEventListener("mouseup", endPress);
+        card.addEventListener("mouseleave", endPress);
+        card.addEventListener("touchend", (e)=>{
+          endPress();
+          if(longPress) e.preventDefault();
+        });
+
+        card.addEventListener("click", ()=>{
+          if(longPress){ longPress=false; return; }
+          openSheet(sheet.id);
+        });
+
+        grid.appendChild(card);
+      });
+    }
+
+    /* SHEET MENU POPUP */
+    function openSheetMenu(sheet){
+      sheetMenuTargetId = sheet.id;
+      document.getElementById("sheetMenuTitle").textContent = sheet.name;
+      document.getElementById("sheetMenuOverlay").classList.remove("hidden");
+    }
+    function closeSheetMenu(){
+      sheetMenuTargetId = null;
+      document.getElementById("sheetMenuOverlay").classList.add("hidden");
+    }
+
+    function sheetMenuAction(action){
+      const idx = state.sheets.findIndex(s=>s.id===sheetMenuTargetId);
+      if(idx === -1) { closeSheetMenu(); return; }
+      const sheet = state.sheets[idx];
+
+      if(action === "edit"){
+        const name = prompt("Edit sheet name:", sheet.name);
+        if(name && name.trim()){
+          sheet.name = name.trim();
+          saveState();
+          renderSheetList();
+          if(viewMode==="sheet") renderSheetContent();
+        }
+      }
+      else if(action === "duplicate"){
+        const newName = prompt("Name for duplicate:", sheet.name+" copy") || sheet.name+" copy";
+        const clone = JSON.parse(JSON.stringify(sheet));
+        clone.id = Date.now().toString()+Math.random().toString(16).slice(2);
+        clone.name = newName.trim();
+        state.sheets.unshift(clone);
+        state.activeSheetId = clone.id;
+        saveState();
+        renderAll();
+      }
+      else if(action === "delete"){
+        if(state.sheets.length === 1){
+          alert("কমপক্ষে ১টা শিট থাকতে হবে।");
+          closeSheetMenu();
+          return;
+        }
+        if(confirm("এই শিটটি ডিলিট হবে, নিশ্চিত?")){
+          state.sheets.splice(idx,1);
+          state.activeSheetId = state.sheets[0]?.id || null;
+          viewMode = state.activeSheetId ? "sheet" : "list";
+          saveState();
+          updateViewMode();
+          renderAll();
+        }
+      }
+
+      closeSheetMenu();
+    }
+
+    /* DETAIL VIEW */
+    function renderSheetContent(){
+      const sheet = getActiveSheet();
+      if(!sheet) return;
+
+      document.getElementById("activeSheetName").textContent = sheet.name;
+      renderTable("cashInTableBody", sheet.cashIn, "cashIn");
+      renderTable("cashOutTableBody", sheet.cashOut, "cashOut");
+      updateSummary();
+    }
+
+    /* TABLE */
+    function renderTable(tbodyId, rows, type){
+      const tbody = document.getElementById(tbodyId);
+      tbody.innerHTML="";
+      rows.forEach((row,idx)=>{
+        const tr = document.createElement("tr");
+
+        const tdDesc = document.createElement("td");
+        const inDesc = document.createElement("input");
+        inDesc.type="text";
+        inDesc.placeholder="Person Name";
+        inDesc.value=row.description||"";
+        inDesc.onchange = e=>{ row.description=e.target.value; saveState(); };
+        tdDesc.appendChild(inDesc);
+        tr.appendChild(tdDesc);
+
+        const tdAmt = document.createElement("td");
+        tdAmt.className="amount";
+        const inAmt = document.createElement("input");
+        inAmt.type="number";
+        inAmt.placeholder="0.000";
+        const v = parseFloat(row.amount);
+        inAmt.value = (!isNaN(v) && v !== 0) ? v : "";
+        inAmt.oninput = e=>{
+          const n = parseFloat(e.target.value);
+          row.amount = isNaN(n)?0:n;
+          saveState();
+          updateTotals();
+                 updateSummary();
+        };
+        tdAmt.appendChild(inAmt);
+        tr.appendChild(tdAmt);
+
+        const tdAct = document.createElement("td");
+
+        const del = document.createElement("button");
+        del.className="action-btn delete";
+        del.textContent="D";
+        del.onclick = ()=>{
+          if(!confirm("এই লাইনটি ডিলিট করতে চান?")) return;
+          const sheet = getActiveSheet();
+          if(!sheet) return;
+          sheet[type].splice(idx,1);
+          saveState();
+          renderSheetContent();
+        };
+        tdAct.appendChild(del);
+
+        const clr = document.createElement("button");
+        clr.className="action-btn clear";
+        clr.textContent="C";
+        clr.onclick = ()=>{
+          if(!confirm("এই লাইনের অামাউন্ট ক্লিয়ার করবেন?")) return;
+          row.amount = 0;
+          const inp = tdAmt.querySelector("input");
+          if(inp) inp.value="";
+          saveState();
+          updateTotals();
+          updateSummary();
+        };
+        tdAct.appendChild(clr);
+
+        tr.appendChild(tdAct);
+        tbody.appendChild(tr);
+      });
+      updateTotals();
+    }
+
+    function sumRows(rows){
+      return rows.reduce((s,r)=>{
+        const v=parseFloat(r.amount);
+        return s+(isNaN(v)?0:v);
+      },0);
+    }
+    function updateTotals(){
+      const sheet = getActiveSheet();
+      if(!sheet) return;
+      const ti = sumRows(sheet.cashIn);
+      const to = sumRows(sheet.cashOut);
+      document.getElementById("cashInTotal").textContent = ti.toFixed(2);
+      document.getElementById("cashOutTotal").textContent = to.toFixed(2);
+    }
+    function updateSummary(){
+      const sheet = getActiveSheet();
+      if(!sheet) return;
+      const ti = sumRows(sheet.cashIn);
+      const to = sumRows(sheet.cashOut);
+      document.getElementById("summaryIn").textContent  = ti.toFixed(2);
+      document.getElementById("summaryOut").textContent = to.toFixed(2);
+      document.getElementById("summaryNet").textContent = (ti-to).toFixed(2);
+    }
+
+    function addRow(type){
+      const sheet = getActiveSheet();
+      if(!sheet) return;
+      sheet[type].push({description:"", amount:0});
+      saveState();
+      renderSheetContent();
+    }
+
+    /* Pinch Zoom */
+    function initLedgerPinchZoom() {
+      const wrapper = document.getElementById("ledgerZoomWrapper");
+      const inner = document.getElementById("ledgerZoomInner");
+      if (!wrapper || !inner) return;
+
+      let baseScale = 1;
+      let currentScale = 1;
+      let startDist = 0;
+
+      function dist(a,b){
+        return Math.hypot(a.clientX-b.clientX, a.clientY-b.clientY);
+      }
+
+      wrapper.addEventListener("touchstart", e=>{
+        if(e.touches.length===2){
+          startDist = dist(e.touches[0], e.touches[1]);
+          baseScale = currentScale;
+        }
+      },{passive:true});
+
+      wrapper.addEventListener("touchmove", e=>{
+        if(e.touches.length===2){
+          e.preventDefault();
+          const newD = dist(e.touches[0], e.touches[1]);
+          let sc = baseScale * (newD/startDist);
+          sc = Math.max(0.6, Math.min(sc, 1.4));
+          currentScale = sc;
+          inner.style.transform = `scale(${sc})`;
+        }
+      },{passive:false});
+    }
+
+    window.addEventListener("DOMContentLoaded", () => {
+      applySavedTheme();
+      initThemeToggle();
+      loadState();
+      initLedgerPinchZoom();
+    });
+</script>
+</body>
 </html>

@@ -1,19 +1,27 @@
 <?xml version='1.0' encoding='utf-8'?>
-<widget id="com.example.myapp" version="1.0.0" xmlns="http://www.w3.org/ns/widgets">
+<widget id="com.example.myapp" version="1.0.0" xmlns="http://www.w3.org/ns/widgets" xmlns:android="http://schemas.android.com/apk/res/android">
     <feature name="SplashScreen">
         <param name="android-package" value="org.apache.cordova.splashscreen.SplashScreen" />
         <param name="onload" value="true" />
     </feature>
-    <name>MyApp</name>
-    <description>My Cordova App</description>
-    <author>Your Name</author>
-    <content src="index.html" />
-    <preference name="loglevel" value="DEBUG" />
-    <preference name="AndroidWindowSplashScreenAnimatedIcon" value="res/screen/android/splash-icon.png" />
-    <preference name="AndroidWindowSplashScreenBackground" value="#FFFFFF" />
-    <preference name="AndroidWindowSplashScreenAnimationDuration" value="300" />
     <feature name="AdMob">
         <param name="android-package" value="com.rjfun.cordova.admob.AdMobPlugin" />
         <param name="onload" value="true" />
     </feature>
+    <name>MyApp</name>
+    <description>Cordova App nader</description>
+    <author>Saif uddin</author>
+    <content src="index.html" />
+    <config-file parent="/manifest" target="AndroidManifest.xml">
+        <uses-permission android:name="android.permission.INTERNET" />
+        <uses-permission android:name="com.google.android.gms.permission.AD_ID" />
+    </config-file>
+    <edit-config file="app/src/main/AndroidManifest.xml" mode="merge" target="/manifest/application">
+        <meta-data android:name="com.google.android.gms.ads.APPLICATION_ID" android:value="ca-app-pub-5298190578902760~4737273893" />
+    </edit-config>
+    <preference name="loglevel" value="DEBUG" />
+    <preference name="AndroidWindowSplashScreenAnimatedIcon" value="res/screen/android/splash-icon.png" />
+    <preference name="AndroidWindowSplashScreenBackground" value="#FFFFFF" />
+    <preference name="AndroidWindowSplashScreenAnimationDuration" value="300" />
+    <preference name="AndroidXEnabled" value="true" />
 </widget>
