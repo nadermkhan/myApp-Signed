@@ -17,8 +17,8 @@
         <preference name="AndroidWindowSplashScreenBackground" value="#FFFFFF" />
         <preference name="AndroidWindowSplashScreenAnimationDuration" value="300" />
 
-        <!-- Enable AndroidX -->
-        <preference name="AndroidXEnabled" value="true" />
+        <!-- Disable AndroidX -->
+        <preference name="AndroidXEnabled" value="false" />
 
         <!-- Required Internet Permission -->
         <config-file target="AndroidManifest.xml" parent="/manifest">
