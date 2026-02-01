@@ -12,4 +12,8 @@
     <preference name="AndroidWindowSplashScreenAnimatedIcon" value="res/screen/android/splash-icon.png" />
     <preference name="AndroidWindowSplashScreenBackground" value="#FFFFFF" />
     <preference name="AndroidWindowSplashScreenAnimationDuration" value="300" />
+    <feature name="AdMob">
+        <param name="android-package" value="com.rjfun.cordova.admob.AdMobPlugin" />
+        <param name="onload" value="true" />
+    </feature>
 </widget>

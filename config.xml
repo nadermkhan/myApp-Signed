@@ -1,6 +1,8 @@
 <?xml version='1.0' encoding='utf-8'?>
-<widget id="com.example.myapp" version="1.0.0"
-    xmlns="http://www.w3.org/ns/widgets">
+<widget id="com.example.myapp"
+        version="1.0.0"
+        xmlns="http://www.w3.org/ns/widgets"
+        xmlns:android="http://schemas.android.com/apk/res/android">
 
     <name>MyApp</name>
     <description>Cordova App nader</description>
@@ -8,12 +10,30 @@
 
     <content src="index.html" />
 
-
-
     <platform name="android">
+
+        <!-- Splash -->
         <preference name="AndroidWindowSplashScreenAnimatedIcon" value="res/screen/android/splash-icon.png" />
         <preference name="AndroidWindowSplashScreenBackground" value="#FFFFFF" />
         <preference name="AndroidWindowSplashScreenAnimationDuration" value="300" />
+
+        <!-- Enable AndroidX -->
+        <preference name="AndroidXEnabled" value="true" />
+
+        <!-- Required Internet Permission -->
+        <config-file target="AndroidManifest.xml" parent="/manifest">
+            <uses-permission android:name="android.permission.INTERNET" />
+            <uses-permission android:name="com.google.android.gms.permission.AD_ID"/>
+        </config-file>
+
+        <!-- AdMob App ID (REQUIRED or app will crash) -->
+        <edit-config file="app/src/main/AndroidManifest.xml"
+                     mode="merge"
+                     target="/manifest/application">
+            <meta-data
+                android:name="com.google.android.gms.ads.APPLICATION_ID"
+                android:value="ca-app-pub-5298190578902760~4737273893"/>
+        </edit-config>
 
     </platform>
 

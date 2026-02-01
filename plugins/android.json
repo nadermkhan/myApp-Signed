@@ -9,7 +9,14 @@
   "installed_plugins": {
     "cordova-plugin-splashscreen": {
       "PACKAGE_NAME": "com.example.myapp"
+    },
+    "cordova-plugin-admob-plus": {
+      "PACKAGE_NAME": "com.example.myapp"
     }
   },
-  "dependent_plugins": {}
+  "dependent_plugins": {
+    "cordova-plugin-extension": {
+      "PACKAGE_NAME": "com.example.myapp"
+    }
+  }
 }
